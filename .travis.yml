@@ -6,9 +6,19 @@ php:
   - 5.6
   - 7.0
   - hhvm
+
+ branches:
+  only:
+    - master
  
 before_script:
   - composer self-update
   - composer install --prefer-source --no-interaction --dev
  
-script: phpunit
+script: 
+  - phpunit
+  - mkdir -p build/logs
+  - phpunit --coverage-clover build/logs/clover.xml
+
+after_script:
+  - php vendor/bin/coveralls -v

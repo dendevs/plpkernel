@@ -1,11 +1,17 @@
 {
-    "name": "dendev/plpskeleton",
-    "description": "skeleton for pulpy project",
+    "name": "dendev/plpkernel",
+    "description": "kernel for pulpy project",
     "type": "libs",
     "require": {
-        "dendev/plpadaptability": "dev-master"
+        "dendev/plpadaptability": "dev-master",
+        "dendev/plpconfig": "dev-master",
+        "pimple/pimple": "^3.0@dev",
+        "herrera-io/wise": "^1.0@dev",
+        "herrera-io/json": "^1.0@dev",
+        "symfony/yaml": "^3.0@dev" 
     },
     "require-dev": {
+        "satooshi/php-coveralls": "dev-master"
     },
     "authors": [
         {
@@ -16,7 +22,7 @@
     "minimum-stability": "dev",
     "autoload": {
         "psr-4": {
-            "DenDev\\Plpskeleton\\": "src"
+            "DenDev\\Plpkernel\\": "src"
         }
     }
 }

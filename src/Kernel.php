@@ -32,7 +32,24 @@ class Kernel implements KernelInterface
      */
     public function get_default_configs()
     {
-        return array();
+        $root_path = str_replace('src', '', dirname(__FILE__));
+
+        $root_url = '';
+        if(! empty($_SERVER['HTTPS']) && ! empty($_SERVER['HTTP_HOST']) && ! empty($_SERVER['REQUEST_URI']) ) {
+            $protocol = ( $_SERVER['HTTPS'] && $_SERVER['HTTPS'] !== 'off' ) ? 'https://' : 'http://';
+            $tmp = "$protocol$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+            $root_url = substr($tmp, 0, strpos($tmp, 'src/'));
+        }
+        return array( 
+            'root_path' => $root_path,
+            'log_path' => $root_path . 'logs/',
+            'config_path' => $root_path . 'configs/',
+            'assets_path' => $root_path . 'assets/',
+            'js_path' => $root_path . 'assets/js/',
+            'js_url' => $root_url . 'assets/js/',
+            'img_path' => $root_path . 'assets/img/',
+            'css_path' => $root_path . 'assets/css/',
+        );
     }
 
     /**
@@ -84,204 +101,77 @@ class Kernel implements KernelInterface
     public function get_service( $service_name )
     {
         $service = false;
-        if( array_key_exists( $id_service, $this->_available_services ) )
+        if( array_key_exists( $service_name, $this->_available_services ) )
         {
-            if( $this->_container->offsetExists( $id_service ) )
+            if( $this->_container->offsetExists( $service_name ) )
             {
                 // get
-                $service = $this->_container[$id_service];
+                $service = $this->_container[$service_name];
             }
             else
             {
                 // add
-                $class_name = $this->_available_services[$id_service];
-                $config_file_with_ext = ( $config_file_with_ext ) ? $config_file_with_ext : $id_service . '.php';
+                $class_name = $this->_available_services[$service_name];
+                $config_file_with_ext = ( $config_file_with_ext ) ? $config_file_with_ext : $service_name . '.php';
                 $config_path = $this->get_config_value( 'service_config_path' ) . $config_file_with_ext;
                 $function = function( $context ) use( $class_name, $config_path ) {
                     $service = new $class_name( $context, $config_path );
                     return $service->get_service_instance();
                 };
-                $this->_container[$id_service] = $function;
-                $service = $this->_container[$id_service];
+                $this->_container[$service_name] = $function;
+                $service = $this->_container[$service_name];
             }
         }
         else
         {
             // not found
-            //throw new \Exception( "Erreur service not found $id_service " );
+            //throw new \Exception( "Erreur service not found $service_name " );
             $service = false;
         }
         return $service;
-    }
-
-    /**
-     * Merge la config general du kernel avec la config par defaut du service.
-     *
-     * La config kernel a la priorite sur celle du service.
-     * Le but est de pouvoir customiser le service via le kernel
-     *
-     * @param array $default_service_configs tableau associatif config valeur
-     *
-     * @return array la config merger
-     */
-    public function merge_configs( $default_service_configs )
-    {
-        if( ( bool ) $default_service_configs ) // better than is_array
-        {
-            $this->_config = array_merge( $default_service_configs, $this->_config );
-        }
-
-
-        return $this->_config;
-    }
-
-    /**
-     * Recupere la valeur d'un option de configuration.
-     *
-     * @param string config_name nom de l'option
-     * @param mixed $default_value valeur si l'option n'existe pas, false par default
-     *
-     * @return mixed|false la valeur ou false si rien trouver
-     */
-    public function get_config_value( $config_name, $default_value = false )
-    {
-        $value = false;
-        if( array_key_exists( $config_name, $this->_config ) )
-        {
-            $value = $this->_config[$config_name];
-        }
-        else if( ! $default_value )
-        {
-            $value = $default_value;
-        }
-
-        return $value;
-    }
-
-    /**
-     * Ecriture de log basique.
-     *
-     * Le logs est ecrit dans /tmp par defaut. 
-     * Si la config log_path existe alors l'ecriture ce fait dans ce repertoire nom_plugin.
-     *
-     * @param string $log_name nom fichier ( sans ext ) 
-     * @param string $level niveau du message ( info, debug, ... )
-     * @param string $message message a logger
-     * @param array $context informations supplementaires
-     *
-     * @return bool true si ecriture ok
-     */
-    public function log( $service_name, $log_name, $level, $message, $context = array() )
-    {
-        $ok = false;
-
-        $tmp_log_path = $this->get_config_value( 'log_path' );
-        $log_path = ( $this->get_config_value( 'log_path' ) ) ? $this->get_config_value( 'log_path' ) . '/' . $service_name . '/' : sys_get_temp_dir() . '/' . $service_name . '/';
-
-        if( ! file_exists( $log_path ) )
-        {
-            mkdir( $log_path, 0755 );
-        }
-
-        $log_path .= $log_name . ".log";
-
-        // avoid big file
-        $append = false;
-        if( file_exists( $log_path ) && filesize( $log_path ) >= 1024 )
-        {
-            //    unlink( $log_path );
-            $append = FILE_APPEND;
-        }
-
-        // write
-        $context_string = ( (bool) $context ) ? print_r( $context, true ) : '';
-        $formated_message = $level . ': ' . $message . ' ( ' . $context_string . ' )';
-        $ok = file_put_contents( $log_path, $formated_message, $append );
-
-        return ( $ok === false ) ? false : true;
-    }
-
-    /**
-     * Gere les erreurs fatal ou non.
-     *
-     * Si l'erreur est fatal log l'erreur et declenche un object Exception
-     * Sinon log l'erreur.
-     *
-     * @param string $service_name le nom du service_name
-     * @param string $message le message
-     * @param int $code le code erreur
-     * @param array $context infos supp sur le context de l'erreur
-     * @param bool $fatal declenche ou non une exception
-     *
-     * @return bool true si l'ecriture dans le log est ok ( et erreur non fatal )
-     */
-    public function error( $service_name, $message, $code, $context = false, $fatal = false )
-    {
-        $ok = false;
-        // log
-        $level = ( $fatal ) ? 'alert' : 'error'; 
-
-        $context_string = ( (bool) $context ) ? print_r( $context, true ) : '';
-        $formated_message = $level . ': ' . $message . ' ( ' . $context_string . ' )';
-
-        $ok = $this->log( $service_name, 'error', $level, $formated_message, $context_string );
-
-        // error
-        if( $fatal )
-        {
-            throw new \Exception( $formated_message );
-        }
-
-        return $ok;
-    }
-
-
-    protected function _set_default_config()
-    {
-        $root_path = str_replace('src', '', dirname(__FILE__));
-
-        $root_url = '';
-        if(! empty($_SERVER['HTTPS']) && ! empty($_SERVER['HTTP_HOST']) && ! empty($_SERVER['REQUEST_URI']) ) {
-            $protocol = ( $_SERVER['HTTPS'] && $_SERVER['HTTPS'] !== 'off' ) ? 'https://' : 'http://';
-            $tmp = "$protocol$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
-            $root_url = substr($tmp, 0, strpos($tmp, 'src/'));
-        }
-        return array( 
-            'root_path' => $root_path,
-            'log_path' => $root_path . 'logs/',
-            'config_path' => $root_path . 'configs/',
-            'assets_path' => $root_path . 'assets/',
-            'js_path' => $root_path . 'assets/js/',
-            'js_url' => $root_url . 'assets/js/',
-            'img_path' => $root_path . 'assets/img/',
-            'css_path' => $root_path . 'assets/css/',
-        );
     }
 
     // -
     private function _set_base_services( $config_dir ) // because at the begining no config, error, logger exist 
     {
         // config
-        $this->_available_services['config'] = 'DenDev\Plpconfig\Config.php';
-        $service = $this->_instanciate_singleton_service( 'config' );
+        $this->_available_services['config'] = '\DenDev\Plpconfig\Config';
+        $krl = $this; // because config can not be set without config...
+        $this->_container['config'] = function( $context ) use( $krl, $config_dir ) {
+            $service = new \DenDev\Plpconfig\Config( $krl, array( 'config_dir' => $config_dir ) );
+            return $service->get_service_instance();
+        };
 
         // log
-        $this->_available_services['logger'] = 'DenDev\Plplogger\Logger.php';
+        $this->_available_services['logger'] = 'DenDev\Plplogger\Logger';
         $service = $this->_instanciate_singleton_service( 'logger' );
 
         // error
-        $this->_available_services['error'] = 'DenDev\Plperror\Error.php';
+        $this->_available_services['error'] = 'DenDev\Plperror\Error';
         $service = $this->_instanciate_singleton_service( 'error' );
     }
 
+    /**
+     * Instancie un service et le stock dans le Container
+     *
+     * Met a jour la configuration et rend l'object dispo
+     *
+     * @param string $service_name le nom du service_name
+     * @param array $args un tableau associatif des arguments a donner au service 
+     *
+     * @return void
+     */
     private function _instanciate_singleton_service( $service_name, $args = null )
     {
         $class_path = $this->_available_services[$service_name];
         $krl = $this;
 
-        $service = new $class_path( $krl, $args );
-        $function = function( $context ) use( $class_path, $krl, $args ) {
+        $function = function( $context ) use( $class_path, $krl, $args, $service_name ) {
+            // create service
             $service = new $class_path( $krl, $args );
+            // update config with default 
+            $this->_config->merge_with_default( $service_name, $service->get_default_configs() );
+            // end
             return $service->get_service_instance();
         };
 
